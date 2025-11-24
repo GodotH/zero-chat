@@ -1,0 +1,5 @@
+{
+  "name": "zero-chat",
+  "description": "A high-precision chat interface implementing the MAKER framework (Massively Decomposed Agentic Processes) for zero-error multi-step problem solving, powered by Gemini 3 Pro.",
+  "requestFramePermissions": []
+}
