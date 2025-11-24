@@ -1,10 +1,25 @@
+export interface TokenUsage {
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCost: number;
+}
+
+export interface Attachment {
+  name: string;
+  mimeType: string;
+  data: string; // Base64 encoded string
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'model' | 'system';
   content: string;
   type?: 'text' | 'maker-process';
+  attachments?: Attachment[];
   makerData?: MakerSessionData;
   timestamp: number;
+  usage?: TokenUsage;
 }
 
 export interface MakerSessionData {
@@ -17,9 +32,12 @@ export interface MakerSessionData {
     votes: number[];
     winnerIndex: number;
     redFlags: number;
+    usage?: TokenUsage;
   }[];
   isComplete: boolean;
-  status: 'planning' | 'generating_candidates' | 'voting' | 'executing' | 'done';
+  isStopped?: boolean;
+  status: 'planning' | 'generating_candidates' | 'voting' | 'executing' | 'done' | 'stopped';
+  totalUsage?: TokenUsage;
 }
 
 export interface AppConfig {
