@@ -17,6 +17,7 @@ const App: React.FC = () => {
   
   const [input, setInput] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [isMakerMode, setIsMakerMode] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [configContent] = useState(DEFAULT_CONFIG_MD);
@@ -79,15 +80,23 @@ const App: React.FC = () => {
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const newFiles = await processFiles(e.target.files);
-      setFiles(prev => [...prev, ...newFiles]);
+      const { valid, errors } = await processFiles(e.target.files);
+      
+      setFiles(prev => [...prev, ...valid]);
+      if (errors.length > 0) {
+        setUploadErrors(prev => [...prev, ...errors]);
+      }
     }
-    // Reset input
+    // Reset input to allow selecting same file again if needed
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeError = (index: number) => {
+    setUploadErrors(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleMakerProcess = async (prompt: string, attachments: Attachment[], messageId: string) => {
@@ -200,6 +209,7 @@ const App: React.FC = () => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setFiles([]);
+    setUploadErrors([]); // Clear errors on submit
     setIsProcessing(true);
 
     try {
@@ -301,7 +311,12 @@ const App: React.FC = () => {
 
         <div className="p-4 bg-black border-t border-zinc-900">
            <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative">
-              <FilePreview files={files} onRemove={removeFile} />
+              <FilePreview 
+                files={files} 
+                errors={uploadErrors}
+                onRemove={removeFile} 
+                onRemoveError={removeError}
+              />
               
               <div className="relative group flex gap-2">
                 <input 
@@ -363,7 +378,7 @@ const App: React.FC = () => {
               
               <div className="flex justify-between mt-2 text-[10px] text-zinc-600 font-mono px-1">
                  <div className="flex gap-4">
-                    <span className="flex items-center gap-1"><AlertOctagon size={10} /> ZERO ERRORS PROTOCOL</span>
+                    <span className="flex items-center gap-1"><AlertOctagon size={10} /> ZERO ERROR PROTOCOL</span>
                     <span className="flex items-center gap-1"><Sparkles size={10} /> GEMINI 3 PRO</span>
                  </div>
                  <div>

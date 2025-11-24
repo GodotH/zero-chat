@@ -15,7 +15,7 @@ export const validateFile = (file: File): string | null => {
   if (!SUPPORTED_MIME_TYPES.some(type => file.type === type || file.type.startsWith('text/'))) {
     // Relaxed check for text files
     if (!file.type.startsWith('text/') && !file.type.includes('pdf') && !file.type.startsWith('image/')) {
-       return `File type "${file.type}" not supported.`;
+       return `File "${file.name}" has unsupported type: ${file.type}`;
     }
   }
   return null;
@@ -35,31 +35,32 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const processFiles = async (files: FileList | null): Promise<Attachment[]> => {
-  if (!files) return [];
+export const processFiles = async (files: FileList | null): Promise<{ valid: Attachment[], errors: string[] }> => {
+  if (!files) return { valid: [], errors: [] };
   
-  const attachments: Attachment[] = [];
+  const valid: Attachment[] = [];
   const errors: string[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const error = validateFile(file);
     if (error) {
-      console.warn(error);
+      errors.push(error);
       continue;
     }
 
     try {
       const base64 = await fileToBase64(file);
-      attachments.push({
+      valid.push({
         name: file.name,
         mimeType: file.type,
         data: base64
       });
     } catch (e) {
       console.error(`Failed to read file ${file.name}`, e);
+      errors.push(`Failed to read file "${file.name}"`);
     }
   }
   
-  return attachments;
+  return { valid, errors };
 };
