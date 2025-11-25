@@ -26,7 +26,17 @@ const Sidebar: React.FC<SidebarProps> = ({
     <div className={`flex flex-col h-full bg-zinc-950 transition-all duration-300 ${isCollapsed ? 'items-center py-4' : 'p-4'}`}>
       
       {/* Header / New Chat */}
-      <div className={`flex items-center ${isCollapsed ? 'flex-col gap-4' : 'justify-between'} mb-6 shrink-0`}>
+      <div className={`flex shrink-0 mb-6 ${isCollapsed ? 'flex-col gap-4 items-center' : 'flex-row items-center justify-between'}`}>
+        
+        {/* Toggle Button (Hidden on Mobile, as Mobile uses Overlay) */}
+        <button 
+          onClick={onToggleCollapse}
+          className="hidden md:flex p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 rounded-lg transition-colors"
+          title={isCollapsed ? "Expand" : "Collapse"}
+        >
+          {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+        </button>
+
         {!isCollapsed && <span className="font-mono text-xs font-bold text-zinc-500 tracking-wider">HISTORY</span>}
         
         <button 
@@ -91,7 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Footer Controls */}
       <div className={`mt-4 pt-4 border-t border-zinc-900 flex flex-col ${isCollapsed ? 'items-center gap-4' : 'gap-2'}`}>
         
-        {/* Config Button - Moved Here */}
+        {/* Config Button */}
         <button 
           onClick={onOpenConfig}
           className={`flex items-center ${isCollapsed ? 'justify-center w-10 h-10' : 'gap-3 px-3 py-2'} text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900 rounded-lg transition-all group`}
@@ -99,16 +109,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         >
           <Settings2 size={18} className="group-hover:rotate-45 transition-transform duration-500" />
           {!isCollapsed && <span className="text-xs font-medium">Configuration</span>}
-        </button>
-
-        {/* Toggle Button */}
-        <button 
-          onClick={onToggleCollapse}
-          className={`flex items-center ${isCollapsed ? 'justify-center w-10 h-10' : 'gap-3 px-3 py-2'} text-zinc-600 hover:text-zinc-300 hover:bg-zinc-900 rounded-lg transition-colors hidden md:flex`}
-          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-          {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          {!isCollapsed && <span className="text-xs font-medium">Collapse</span>}
         </button>
 
         <a 

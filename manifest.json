@@ -1,7 +1,9 @@
 {
   "name": "Zero-Chat MAKER",
   "short_name": "Zero-Chat",
+  "description": "Zero-Error Multi-Agent Reasoning Interface",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",

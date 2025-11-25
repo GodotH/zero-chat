@@ -31,9 +31,6 @@ const App: React.FC = () => {
     try {
       const currentId = localStorage.getItem('zero-chat-current-session');
       if (currentId) {
-        // Must read raw LS or use the state initializer logic again because 'sessions' state 
-        // isn't available inside its own initializer block if we were running them parallel,
-        // but here we are sequential. However, best to read source of truth.
         const savedSessionsRaw = localStorage.getItem('zero-chat-sessions');
         const savedSessions = savedSessionsRaw ? JSON.parse(savedSessionsRaw) : [];
         const activeSession = savedSessions.find((s: any) => s.id === currentId);
@@ -58,7 +55,7 @@ const App: React.FC = () => {
 
   // UI State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default to Collapsed
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   
   const [input, setInput] = useState('');
@@ -83,7 +80,6 @@ const App: React.FC = () => {
   }, []);
 
   // Sync Messages -> Sessions -> LocalStorage
-  // We utilize a specific saver function to ensure we always write the latest state
   const saveMessagesToSession = (newMessages: Message[]) => {
     setMessages(newMessages); // Update UI
     
@@ -125,7 +121,6 @@ const App: React.FC = () => {
     const newId = Date.now().toString();
     const newSession = { id: newId, title: 'New Chat', timestamp: Date.now(), messages: [] };
     
-    // Update all state synchronously to prevent race conditions
     setSessions(prev => {
       const updated = [newSession, ...prev];
       localStorage.setItem('zero-chat-sessions', JSON.stringify(updated));
@@ -147,11 +142,9 @@ const App: React.FC = () => {
       if (newSessions.length > 0) {
         selectSession(newSessions[0].id);
       } else {
-        // Don't call createNewSession immediately to avoid loop, just clear
         setMessages([]);
         setCurrentSessionId('');
         localStorage.removeItem('zero-chat-current-session');
-        // The useEffect will catch the empty state and create a new one
       }
     }
   };
@@ -168,17 +161,15 @@ const App: React.FC = () => {
 
   const handleConfigChange = (newConfig: AppConfig) => {
     setConfig(newConfig);
-    setIsConfigOpen(false); // Auto close on save
+    setIsConfigOpen(false);
   };
 
   const handleStop = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    // FORCE KILL STATE
     setIsProcessing(false);
     
-    // Mark last message as stopped in UI and Persistence
     const updatedMessages = [...messages];
     const last = updatedMessages[updatedMessages.length - 1];
     if (last && last.role === 'model') {
@@ -191,7 +182,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Emergency Reset
   const forceReset = () => {
     if (confirm("Force reset active tasks? This fixes 'stuck' states.")) {
       handleStop();
@@ -231,7 +221,6 @@ const App: React.FC = () => {
       totalUsage: { promptTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: 0 }
     };
 
-    // Helper to update state and persistence efficiently
     const updateSession = (newData: Partial<MakerSessionData>) => {
       Object.assign(sessionData, newData);
       
@@ -239,14 +228,10 @@ const App: React.FC = () => {
         const newMsgs = prevMessages.map(m => 
           m.id === messageId ? { ...m, makerData: { ...sessionData } } : m
         );
-        // We don't save to LS on *every* micro-update to avoid thrashing, 
-        // but for critical state changes we should. 
-        // For visualizer smoothness, we update React state mostly.
         return newMsgs;
       });
     };
 
-    // Save to LS wrapper for critical checkpoints
     const persistState = () => {
        setSessions(prev => prev.map(s => 
          s.id === currentSessionId 
@@ -308,7 +293,7 @@ const App: React.FC = () => {
         });
 
         updateSession({ status: 'executing' });
-        persistState(); // Save after every step
+        persistState(); 
       }
 
       if (!signal.aborted) {
@@ -324,7 +309,6 @@ const App: React.FC = () => {
          updateSession({ status: 'stopped', isStopped: true });
        } else {
          console.error(e);
-         // Update the actual message in the list with error
          setMessages(prev => {
             const newMsgs = [...prev, {
               id: Date.now().toString(),
@@ -333,17 +317,12 @@ const App: React.FC = () => {
               timestamp: Date.now()
            } as Message];
            
-           // Also update the maker message status
            return newMsgs.map(m => m.id === messageId ? { ...m, makerData: { ...m.makerData!, status: 'stopped' as const, isStopped: true } } : m);
          });
        }
-       // Ensure persistence of error state
        setSessions(prev => {
          const current = prev.find(s => s.id === currentSessionId);
          if(current) {
-            // Re-read messages from state or construct carefully? 
-            // Simplified: we rely on the next render cycle or force sync above.
-            // Just force a sync of the current state reference we have
             return prev.map(s => s.id === currentSessionId ? { ...s, messages: messages } : s); 
          }
          return prev;
@@ -355,9 +334,8 @@ const App: React.FC = () => {
     e.preventDefault();
     if ((!input.trim() && files.length === 0) || isProcessing) return;
 
-    // --- COMMAND HANDLING ---
     if (input.trim() === '/clear') {
-       saveMessagesToSession([]); // Clear current session messages
+       saveMessagesToSession([]); 
        setInput('');
        setFiles([]);
        return;
@@ -374,7 +352,7 @@ const App: React.FC = () => {
     };
 
     const newMessages = [...messages, userMsg];
-    saveMessagesToSession(newMessages); // Save user message
+    saveMessagesToSession(newMessages);
     
     setInput('');
     setFiles([]);
@@ -431,7 +409,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[100dvh] bg-black text-zinc-100 font-sans overflow-hidden">
+    // Added pt-[env(safe-area-inset-top)] for notch support and select-none for app-feel
+    <div className="flex h-[100dvh] bg-black text-zinc-100 font-sans overflow-hidden select-none pt-[env(safe-area-inset-top)]">
       
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
@@ -444,14 +423,14 @@ const App: React.FC = () => {
       {/* Sidebar */}
       <div className={`
         fixed md:relative inset-y-0 left-0 z-50 bg-zinc-950 border-r border-zinc-900 
-        transform transition-all duration-300 ease-in-out
+        transform transition-all duration-300 ease-in-out pt-[env(safe-area-inset-top)] md:pt-0
         ${isMobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'}
         ${isSidebarCollapsed ? 'md:w-16' : 'md:w-72'}
       `}>
         <Sidebar 
           sessions={sessions} 
           currentId={currentSessionId} 
-          isCollapsed={isSidebarCollapsed}
+          isCollapsed={isMobileMenuOpen ? false : isSidebarCollapsed}
           onSelect={selectSession} 
           onNew={createNewSession}
           onDelete={deleteSession}
@@ -512,11 +491,13 @@ const App: React.FC = () => {
         </header>
 
         <ErrorBoundary>
-          <ChatInterface messages={messages} isMakerMode={isMakerMode} />
+          <div className="flex-1 overflow-y-auto select-text">
+             <ChatInterface messages={messages} isMakerMode={isMakerMode} />
+          </div>
         </ErrorBoundary>
 
-        <div className="p-3 sm:p-4 bg-black border-t border-zinc-900 shrink-0">
-           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative">
+        <div className="p-3 sm:p-4 bg-black border-t border-zinc-900 shrink-0 pb-[env(safe-area-inset-bottom)]">
+           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative mb-[env(safe-area-inset-bottom)]">
               <FilePreview 
                 files={files} 
                 errors={uploadErrors}
@@ -547,7 +528,7 @@ const App: React.FC = () => {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={isMakerMode ? "Task or Analysis... (/clear to reset)" : "Message Gemini... (/clear to reset)"}
-                    className="w-full h-full bg-zinc-900 border border-zinc-700 text-zinc-100 rounded-lg pl-4 pr-12 focus:outline-none focus:border-emerald-600/50 focus:ring-1 focus:ring-emerald-900/50 font-mono text-sm transition-all disabled:opacity-50"
+                    className="w-full h-full bg-zinc-900 border border-zinc-700 text-zinc-100 rounded-lg pl-4 pr-12 focus:outline-none focus:border-emerald-600/50 focus:ring-1 focus:ring-emerald-900/50 font-mono text-sm transition-all disabled:opacity-50 select-text"
                     disabled={isProcessing}
                   />
                   
