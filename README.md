@@ -1,20 +1,25 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# zero-chat
+> **High-Precision Multi-Agent Reasoning Interface**
 
-# Run and deploy your AI Studio app
+Zero-Chat is a web interface implementing the **MAKER framework** (Massively Decomposed Agentic Processes) to solve complex tasks with "zero error" reliability. It uses Google's Gemini 3 Pro model to decompose tasks into atomic steps, generate multiple candidate solutions for each step, and vote on the best outcome.
 
-This contains everything you need to run your app locally.
+### 🔗 **Concept Paper**
+This project is an implementation of the concepts discussed in:  
+**[Solving a Million-Step LLM Task with Zero Errors](https://arxiv.org/pdf/2511.09030v1)**  
+*Meyerson et al., Cognizant AI Lab (2025)*
 
-View your app in AI Studio: https://ai.studio/apps/drive/1-ivq8tMnO2XcnhzpWnIUjMN23ZlThcEz
+---
 
-## Run Locally
+## Key Features
+- **MAKER Framework**: Automatic task decomposition, candidate generation, and voting.
+- **Multimodal**: Analyze Images, PDFs, and Text files with rigorous verification.
+- **Zero Error Protocol**: Red-flagging logic detects and discards hallucinated or lazy responses.
+- **Cost Transparency**: Real-time tracking of token usage and estimated cost.
+- **Resilience**: Auto-save history, zombie-task cleanup, and error boundaries.
 
-**Prerequisites:**  Node.js
+## Disclaimer
+This is a community project created for educational and experimental purposes. It is not an official product of Cognizant AI Lab or Google.
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## License
+**CC BY-NC 4.0** (Creative Commons Attribution-NonCommercial 4.0 International)
+Free for non-commercial use, modification, and distribution.

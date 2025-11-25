@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MakerSessionData } from '../types';
-import { Check, Loader2, AlertTriangle, Play, ChevronDown, ChevronRight, Scale, XOctagon } from 'lucide-react';
+import { Loader2, AlertTriangle, Play, ChevronDown, ChevronRight, Scale, XOctagon } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, Cell } from 'recharts';
 
 interface MakerVisualizerProps {
@@ -12,11 +12,9 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
   useEffect(() => {
-    // Auto-scroll to bottom on new updates
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    // Auto-expand the current running step
     if (!data.isComplete && !data.isStopped) {
       setExpandedStep(data.currentStepIndex);
     }
@@ -33,7 +31,7 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
       <div className="bg-zinc-900/50 p-4 border-b border-zinc-800 flex justify-between items-center backdrop-blur-sm">
         <div className="flex flex-col">
           <div className="flex items-center gap-2 text-emerald-400 font-mono text-sm tracking-wider font-bold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className={`w-2 h-2 rounded-full ${data.isStopped || data.isComplete ? 'bg-zinc-500' : 'bg-emerald-500 animate-pulse'}`}></span>
             MAKER PROTOCOL
           </div>
           <span className="text-[10px] text-zinc-500 font-mono mt-1">
@@ -53,14 +51,14 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
              data.isComplete ? 'bg-emerald-950/30 border-emerald-900 text-emerald-500' :
              'bg-blue-950/30 border-blue-900 text-blue-400'
            }`}>
-              {data.isStopped ? 'TERMINATED' : data.status.toUpperCase()}
+              {data.isStopped ? 'STOPPED' : data.status.toUpperCase()}
            </div>
         </div>
       </div>
 
       <div ref={scrollRef} className="p-4 max-h-[600px] overflow-y-auto space-y-3 custom-scrollbar">
         
-        {/* Planning Phase Card */}
+        {/* Planning Phase */}
         <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-lg p-3">
           <h4 className="text-[10px] uppercase text-zinc-500 font-bold mb-2 flex items-center gap-2">
             <Play size={10} /> Decomposition Plan
@@ -72,8 +70,8 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
                  <div key={idx} className={`
                    text-[10px] px-2 py-1 rounded border font-mono flex items-center gap-1.5 transition-all
                    ${status === 'done' ? 'bg-emerald-900/20 border-emerald-900/50 text-emerald-400' : ''}
-                   ${status === 'active' ? 'bg-blue-900/20 border-blue-800 text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.1)]' : ''}
-                   ${status === 'pending' ? 'bg-zinc-900 border-zinc-800 text-zinc-600' : ''}
+                   ${status === 'active' && !data.isStopped && !data.isComplete ? 'bg-blue-900/20 border-blue-800 text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.1)]' : ''}
+                   ${(status === 'pending' || data.isStopped) && status !== 'done' ? 'bg-zinc-900 border-zinc-800 text-zinc-600' : ''}
                  `}>
                    <span className="opacity-50">{idx+1}.</span>
                    {step.length > 25 ? step.substring(0, 25) + '...' : step}
@@ -88,7 +86,7 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
           </div>
         </div>
 
-        {/* Steps List */}
+        {/* Completed Steps */}
         {data.completedSteps.map((stepData, idx) => (
            <div key={idx} className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900/20">
               <div 
@@ -99,7 +97,7 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
                    <div className="w-5 h-5 rounded-full bg-emerald-900/50 border border-emerald-800 flex items-center justify-center text-emerald-400 text-[10px] font-mono">
                      {idx + 1}
                    </div>
-                   <span className="text-xs text-zinc-300 font-mono truncate max-w-[200px] sm:max-w-md">
+                   <span className="text-xs text-zinc-300 font-mono truncate max-w-[160px] sm:max-w-md">
                      {stepData.step}
                    </span>
                  </div>
@@ -116,14 +114,13 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
                  </div>
               </div>
 
-              {/* Expanded Details */}
               {expandedStep === idx && (
                 <div className="border-t border-zinc-800 p-4 bg-zinc-950/50 animate-in slide-in-from-top-2">
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       {/* Left: Result */}
                       <div>
                         <h5 className="text-[10px] uppercase text-zinc-500 font-bold mb-2">Winning Execution</h5>
-                        <div className="p-3 bg-zinc-900 rounded border border-zinc-800 text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">
+                        <div className="p-3 bg-zinc-900 rounded border border-zinc-800 text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto custom-scrollbar">
                           {stepData.result}
                         </div>
                       </div>
@@ -138,8 +135,8 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={stepData.candidates.map((c, i) => ({ 
                               name: `C${i}`, 
-                              value: i === stepData.winnerIndex ? 100 : 20 + Math.random() * 20, 
-                              label: c.substring(0, 50)
+                              value: i === stepData.winnerIndex ? 100 : 20 + Math.random() * 20,
+                              label: c 
                             }))}>
                                <Bar dataKey="value" radius={[2, 2, 0, 0]}>
                                   {stepData.candidates.map((entry, index) => (
@@ -155,11 +152,12 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
                                   content={({ active, payload }) => {
                                     if (active && payload && payload.length) {
                                       const dataIdx = parseInt(payload[0].payload.name.substring(1));
+                                      const text = payload[0].payload.label;
                                       return (
                                         <div className="bg-black border border-zinc-700 p-2 rounded shadow-xl max-w-[200px] z-50">
                                           <p className="text-[10px] text-zinc-400 mb-1 font-bold">Candidate {dataIdx}</p>
                                           <p className="text-[10px] text-zinc-300 line-clamp-4 font-mono">
-                                            {stepData.candidates[dataIdx]}
+                                            {text}
                                           </p>
                                         </div>
                                       );
@@ -199,7 +197,7 @@ const MakerVisualizer: React.FC<MakerVisualizerProps> = ({ data }) => {
 
         {data.isStopped && (
           <div className="flex items-center justify-center gap-2 p-4 text-red-500 text-xs font-mono border border-red-900/30 bg-red-950/10 rounded-lg">
-             <XOctagon size={14} /> EXECUTION INTERRUPTED BY USER
+             <XOctagon size={14} /> EXECUTION HALTED
           </div>
         )}
       </div>

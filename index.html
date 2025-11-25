@@ -2,8 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>zero-chat</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%2310b981%22 /><path d=%22M35 50 L45 60 L65 40%22 stroke=%22black%22 stroke-width=%2210%22 fill=%22none%22 /></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -17,18 +18,21 @@
       }
       /* Custom scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #18181b; 
+        background: #09090b; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #3f3f46; 
+        background: #27272a; 
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #52525b; 
+        background: #3f3f46; 
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
       }
     </style>
   <script type="importmap">
