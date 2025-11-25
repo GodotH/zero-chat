@@ -11,7 +11,9 @@ import { processFiles } from './services/fileHelpers';
 import { Send, ToggleLeft, ToggleRight, Sparkles, AlertOctagon, StopCircle, Trash2, Coins, Paperclip, HardDrive, Menu, Skull } from 'lucide-react';
 
 const App: React.FC = () => {
-  // SESSION MANAGEMENT & ZOMBIE KILLER
+  // --- STATE INITIALIZATION ---
+  
+  // 1. Sessions (Lazy load from LS)
   const [sessions, setSessions] = useState<{id: string, title: string, timestamp: number, messages: Message[]}[]>(() => {
     try {
       const saved = localStorage.getItem('zero-chat-sessions');
@@ -19,21 +21,32 @@ const App: React.FC = () => {
     } catch (e) { return []; }
   });
 
+  // 2. Current Session ID (Lazy load)
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
     return localStorage.getItem('zero-chat-current-session') || '';
   });
 
+  // 3. Messages (CRITICAL FIX: Load immediately from sessions based on ID)
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
-      // Legacy single-history fallback
-      if (!localStorage.getItem('zero-chat-current-session')) {
-        const legacy = localStorage.getItem('zero-chat-history');
-        if (legacy) {
-          const parsed = JSON.parse(legacy);
-          // SANITIZE ZOMBIES
-          return parsed.map((m: Message) => {
+      const currentId = localStorage.getItem('zero-chat-current-session');
+      if (currentId) {
+        // Must read raw LS or use the state initializer logic again because 'sessions' state 
+        // isn't available inside its own initializer block if we were running them parallel,
+        // but here we are sequential. However, best to read source of truth.
+        const savedSessionsRaw = localStorage.getItem('zero-chat-sessions');
+        const savedSessions = savedSessionsRaw ? JSON.parse(savedSessionsRaw) : [];
+        const activeSession = savedSessions.find((s: any) => s.id === currentId);
+        
+        if (activeSession) {
+          // Zombie sanitization on boot
+          return activeSession.messages.map((m: Message) => {
              if (m.makerData && !m.makerData.isComplete && !m.makerData.isStopped) {
-               return { ...m, makerData: { ...m.makerData, status: 'stopped' as const, isStopped: true }, content: m.content + "\n\n[SYSTEM: EXECUTION INTERRUPTED ON RELOAD]" };
+               return { 
+                 ...m, 
+                 makerData: { ...m.makerData, status: 'stopped' as const, isStopped: true },
+                 content: m.content + "\n\n[SYSTEM: EXECUTION INTERRUPTED ON RELOAD]" 
+               };
              }
              return m;
           });
@@ -43,8 +56,11 @@ const App: React.FC = () => {
     } catch (e) { return []; }
   });
 
-  // State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // UI State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  
   const [input, setInput] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
@@ -57,45 +73,39 @@ const App: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize Session if none
-  useEffect(() => {
-    if (!currentSessionId) {
-      createNewSession();
-    } else {
-      // Load selected session
-      const session = sessions.find(s => s.id === currentSessionId);
-      if (session) {
-        // SANITIZE ZOMBIES ON LOAD
-        const cleanMessages = session.messages.map(m => {
-           if (m.makerData && !m.makerData.isComplete && !m.makerData.isStopped) {
-             return { 
-               ...m, 
-               makerData: { ...m.makerData, status: 'stopped' as const, isStopped: true },
-               content: m.content + "\n\n[SYSTEM: EXECUTION INTERRUPTED]" 
-             };
-           }
-           return m;
-        });
-        setMessages(cleanMessages);
-      }
-    }
-  }, [currentSessionId]);
+  // --- EFFECTS ---
 
-  // Save Messages to Current Session
+  // Initialize Session if absolutely none exist
   useEffect(() => {
-    if (!currentSessionId) return;
+    if (!currentSessionId && sessions.length === 0) {
+      createNewSession();
+    }
+  }, []);
+
+  // Sync Messages -> Sessions -> LocalStorage
+  // We utilize a specific saver function to ensure we always write the latest state
+  const saveMessagesToSession = (newMessages: Message[]) => {
+    setMessages(newMessages); // Update UI
     
-    setSessions(prev => {
-      const updated = prev.map(s => 
-        s.id === currentSessionId 
-          ? { ...s, messages, title: s.messages.length === 0 ? 'New Chat' : s.title === 'New Chat' && messages[0] ? messages[0].content.substring(0, 30) : s.title } 
-          : s
-      );
-      localStorage.setItem('zero-chat-sessions', JSON.stringify(updated));
-      return updated;
+    setSessions(prevSessions => {
+      const updatedSessions = prevSessions.map(s => {
+        if (s.id === currentSessionId) {
+          // Auto-title logic
+          const newTitle = s.messages.length === 0 && newMessages.length > 0
+            ? newMessages[0].content.substring(0, 30) || "Image Analysis"
+            : s.title === 'New Chat' && newMessages.length > 0 
+              ? newMessages[0].content.substring(0, 30) 
+              : s.title;
+          
+          return { ...s, messages: newMessages, title: newTitle };
+        }
+        return s;
+      });
+      
+      localStorage.setItem('zero-chat-sessions', JSON.stringify(updatedSessions));
+      return updatedSessions;
     });
-    localStorage.setItem('zero-chat-current-session', currentSessionId);
-  }, [messages, currentSessionId]);
+  };
 
   // Calculate Cost
   useEffect(() => {
@@ -109,13 +119,22 @@ const App: React.FC = () => {
     setTotalCost(cost);
   }, [messages]);
 
+  // --- ACTIONS ---
+
   const createNewSession = () => {
     const newId = Date.now().toString();
     const newSession = { id: newId, title: 'New Chat', timestamp: Date.now(), messages: [] };
-    setSessions(prev => [newSession, ...prev]);
+    
+    // Update all state synchronously to prevent race conditions
+    setSessions(prev => {
+      const updated = [newSession, ...prev];
+      localStorage.setItem('zero-chat-sessions', JSON.stringify(updated));
+      return updated;
+    });
     setCurrentSessionId(newId);
+    localStorage.setItem('zero-chat-current-session', newId);
     setMessages([]);
-    setIsSidebarOpen(false); // Close sidebar on mobile when selecting new
+    setIsMobileMenuOpen(false); 
   };
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
@@ -123,19 +142,33 @@ const App: React.FC = () => {
     const newSessions = sessions.filter(s => s.id !== id);
     setSessions(newSessions);
     localStorage.setItem('zero-chat-sessions', JSON.stringify(newSessions));
+    
     if (currentSessionId === id) {
-      if (newSessions.length > 0) setCurrentSessionId(newSessions[0].id);
-      else createNewSession();
+      if (newSessions.length > 0) {
+        selectSession(newSessions[0].id);
+      } else {
+        // Don't call createNewSession immediately to avoid loop, just clear
+        setMessages([]);
+        setCurrentSessionId('');
+        localStorage.removeItem('zero-chat-current-session');
+        // The useEffect will catch the empty state and create a new one
+      }
     }
   };
 
   const selectSession = (id: string) => {
-    setCurrentSessionId(id);
-    setIsSidebarOpen(false);
+    const session = sessions.find(s => s.id === id);
+    if (session) {
+      setCurrentSessionId(id);
+      localStorage.setItem('zero-chat-current-session', id);
+      setMessages(session.messages);
+      setIsMobileMenuOpen(false);
+    }
   };
 
   const handleConfigChange = (newConfig: AppConfig) => {
     setConfig(newConfig);
+    setIsConfigOpen(false); // Auto close on save
   };
 
   const handleStop = () => {
@@ -144,19 +177,18 @@ const App: React.FC = () => {
     }
     // FORCE KILL STATE
     setIsProcessing(false);
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === 'model') {
-         const updated = [...prev];
-         updated[updated.length - 1] = {
-           ...last,
-           makerData: last.makerData ? { ...last.makerData, status: 'stopped' as const, isStopped: true } : undefined,
-           content: last.makerData ? last.content : (last.content + " [STOPPED]")
-         };
-         return updated;
-      }
-      return prev;
-    });
+    
+    // Mark last message as stopped in UI and Persistence
+    const updatedMessages = [...messages];
+    const last = updatedMessages[updatedMessages.length - 1];
+    if (last && last.role === 'model') {
+       updatedMessages[updatedMessages.length - 1] = {
+         ...last,
+         makerData: last.makerData ? { ...last.makerData, status: 'stopped' as const, isStopped: true } : undefined,
+         content: last.makerData ? last.content : (last.content + " [STOPPED]")
+       };
+       saveMessagesToSession(updatedMessages);
+    }
   };
 
   // Emergency Reset
@@ -184,6 +216,8 @@ const App: React.FC = () => {
     setUploadErrors(prev => prev.filter((_, i) => i !== index));
   };
 
+  // --- MAKER LOGIC ---
+
   const handleMakerProcess = async (prompt: string, attachments: Attachment[], messageId: string) => {
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
@@ -197,11 +231,31 @@ const App: React.FC = () => {
       totalUsage: { promptTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: 0 }
     };
 
+    // Helper to update state and persistence efficiently
     const updateSession = (newData: Partial<MakerSessionData>) => {
       Object.assign(sessionData, newData);
-      setMessages(prev => prev.map(m => 
-        m.id === messageId ? { ...m, makerData: { ...sessionData } } : m
-      ));
+      
+      setMessages(prevMessages => {
+        const newMsgs = prevMessages.map(m => 
+          m.id === messageId ? { ...m, makerData: { ...sessionData } } : m
+        );
+        // We don't save to LS on *every* micro-update to avoid thrashing, 
+        // but for critical state changes we should. 
+        // For visualizer smoothness, we update React state mostly.
+        return newMsgs;
+      });
+    };
+
+    // Save to LS wrapper for critical checkpoints
+    const persistState = () => {
+       setSessions(prev => prev.map(s => 
+         s.id === currentSessionId 
+           ? { 
+               ...s, 
+               messages: s.messages.map(m => m.id === messageId ? { ...m, makerData: { ...sessionData } } : m) 
+             } 
+           : s
+       ));
     };
 
     const addUsage = (u: TokenUsage) => {
@@ -217,6 +271,7 @@ const App: React.FC = () => {
       const { plan, usage: planUsage } = await decomposeTask(prompt, config, attachments, signal);
       addUsage(planUsage);
       updateSession({ plan, status: 'generating_candidates' });
+      persistState();
 
       let fullResultText = "";
 
@@ -253,12 +308,15 @@ const App: React.FC = () => {
         });
 
         updateSession({ status: 'executing' });
+        persistState(); // Save after every step
       }
 
       if (!signal.aborted) {
         updateSession({ status: 'done', isComplete: true });
+        persistState();
       } else {
         updateSession({ status: 'stopped', isStopped: true });
+        persistState();
       }
 
     } catch (e: any) {
@@ -266,20 +324,44 @@ const App: React.FC = () => {
          updateSession({ status: 'stopped', isStopped: true });
        } else {
          console.error(e);
-         setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: 'system',
-            content: `System Error: ${e.message}`,
-            timestamp: Date.now()
-         }]);
-         updateSession({ status: 'stopped', isStopped: true });
+         // Update the actual message in the list with error
+         setMessages(prev => {
+            const newMsgs = [...prev, {
+              id: Date.now().toString(),
+              role: 'system',
+              content: `System Error: ${e.message}`,
+              timestamp: Date.now()
+           } as Message];
+           
+           // Also update the maker message status
+           return newMsgs.map(m => m.id === messageId ? { ...m, makerData: { ...m.makerData!, status: 'stopped' as const, isStopped: true } } : m);
+         });
        }
+       // Ensure persistence of error state
+       setSessions(prev => {
+         const current = prev.find(s => s.id === currentSessionId);
+         if(current) {
+            // Re-read messages from state or construct carefully? 
+            // Simplified: we rely on the next render cycle or force sync above.
+            // Just force a sync of the current state reference we have
+            return prev.map(s => s.id === currentSessionId ? { ...s, messages: messages } : s); 
+         }
+         return prev;
+       });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!input.trim() && files.length === 0) || isProcessing) return;
+
+    // --- COMMAND HANDLING ---
+    if (input.trim() === '/clear') {
+       saveMessagesToSession([]); // Clear current session messages
+       setInput('');
+       setFiles([]);
+       return;
+    }
 
     abortControllerRef.current = new AbortController();
     const currentFiles = [...files];
@@ -291,7 +373,9 @@ const App: React.FC = () => {
       timestamp: Date.now()
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    saveMessagesToSession(newMessages); // Save user message
+    
     setInput('');
     setFiles([]);
     setUploadErrors([]);
@@ -314,7 +398,7 @@ const App: React.FC = () => {
           },
           timestamp: Date.now()
         };
-        setMessages(prev => [...prev, makerMsg]);
+        saveMessagesToSession([...newMessages, makerMsg]);
         await handleMakerProcess(userMsg.content, currentFiles, makerMsgId);
 
       } else {
@@ -328,16 +412,17 @@ const App: React.FC = () => {
           timestamp: Date.now(),
           usage: response.usage
         };
-        setMessages(prev => [...prev, botMsg]);
+        saveMessagesToSession([...newMessages, botMsg]);
       }
     } catch (error: any) {
       if (error.message !== "Request aborted") {
-        setMessages(prev => [...prev, {
+        const errorMsg: Message = {
           id: (Date.now() + 1).toString(),
           role: 'system',
           content: "Error: Could not process request. " + error.message,
           timestamp: Date.now()
-        }]);
+        };
+        saveMessagesToSession([...messages, userMsg, errorMsg]);
       }
     } finally {
       setIsProcessing(false);
@@ -349,62 +434,69 @@ const App: React.FC = () => {
     <div className="flex h-[100dvh] bg-black text-zinc-100 font-sans overflow-hidden">
       
       {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
+      {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm"
-          onClick={() => setIsSidebarOpen(false)}
+          onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={`
-        fixed md:relative inset-y-0 left-0 z-50 w-72 bg-zinc-950 border-r border-zinc-900 transform transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        fixed md:relative inset-y-0 left-0 z-50 bg-zinc-950 border-r border-zinc-900 
+        transform transition-all duration-300 ease-in-out
+        ${isMobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'}
+        ${isSidebarCollapsed ? 'md:w-16' : 'md:w-72'}
       `}>
         <Sidebar 
           sessions={sessions} 
           currentId={currentSessionId} 
+          isCollapsed={isSidebarCollapsed}
           onSelect={selectSession} 
           onNew={createNewSession}
           onDelete={deleteSession}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onOpenConfig={() => setIsConfigOpen(true)}
         />
       </div>
 
-      <div className="flex-1 flex flex-col relative transition-all duration-300 h-full">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col relative transition-all duration-300 h-full min-w-0">
         
         <header className="h-14 shrink-0 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-950/80 backdrop-blur">
           <div className="flex items-center gap-3">
             <button 
               className="md:hidden p-2 -ml-2 text-zinc-400 hover:text-white"
-              onClick={() => setIsSidebarOpen(true)}
+              onClick={() => setIsMobileMenuOpen(true)}
             >
               <Menu size={20} />
             </button>
             <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
             <h1 className="font-mono font-bold text-lg tracking-tight hidden sm:block">zero-chat</h1>
-            <span className="text-[10px] text-zinc-500 border border-zinc-800 rounded px-1.5 py-0.5">v1.2.1</span>
+            <span className="text-[10px] text-zinc-500 border border-zinc-800 rounded px-1.5 py-0.5">v1.3.0</span>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">
-             <div className="flex items-center gap-2 px-3 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-400">
+             <div className="flex items-center gap-2 px-3 py-1 rounded bg-zinc-900/50 border border-zinc-800 text-xs font-mono text-zinc-400">
                <Coins size={14} className="text-yellow-500" />
                <span className="hidden sm:inline">${totalCost.toFixed(4)}</span>
              </div>
 
-             <div className="flex items-center gap-2 sm:gap-4">
+             <div className="h-6 w-px bg-zinc-800/50"></div>
+
+             <div className="flex items-center gap-2">
                 <button 
                   onClick={forceReset}
-                  className="p-2 bg-red-950/30 border border-red-900/50 hover:bg-red-900/50 text-red-500 rounded transition-colors"
-                  title="Force Kill / Reset Tasks"
+                  className="p-1.5 hover:bg-red-900/30 text-zinc-500 hover:text-red-500 rounded transition-colors"
+                  title="Force Kill Tasks"
                 >
                   <Skull size={16} />
                 </button>
 
-                <div className="h-6 w-px bg-zinc-800"></div>
-
                 <div 
-                  className="flex items-center gap-2 cursor-pointer group select-none"
+                  className="flex items-center gap-2 cursor-pointer group select-none ml-2"
                   onClick={() => setIsMakerMode(!isMakerMode)}
+                  title={isMakerMode ? "Switch to Standard Chat" : "Switch to Maker Agent"}
                 >
                     <span className={`text-[10px] sm:text-xs font-mono font-bold transition-colors ${isMakerMode ? 'text-emerald-400' : 'text-zinc-500'}`}>
                       {isMakerMode ? 'MAKER' : 'CHAT'}
@@ -454,7 +546,7 @@ const App: React.FC = () => {
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder={isMakerMode ? "Task or Analysis..." : "Message Gemini..."}
+                    placeholder={isMakerMode ? "Task or Analysis... (/clear to reset)" : "Message Gemini... (/clear to reset)"}
                     className="w-full h-full bg-zinc-900 border border-zinc-700 text-zinc-100 rounded-lg pl-4 pr-12 focus:outline-none focus:border-emerald-600/50 focus:ring-1 focus:ring-emerald-900/50 font-mono text-sm transition-all disabled:opacity-50"
                     disabled={isProcessing}
                   />
@@ -492,7 +584,12 @@ const App: React.FC = () => {
 
       </div>
 
-      <ConfigEditor initialContent={configContent} onConfigChange={handleConfigChange} />
+      <ConfigEditor 
+        isOpen={isConfigOpen} 
+        onClose={() => setIsConfigOpen(false)}
+        initialContent={configContent} 
+        onConfigChange={handleConfigChange} 
+      />
     </div>
   );
 };
