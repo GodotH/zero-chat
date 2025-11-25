@@ -552,7 +552,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               
-              <div className="flex justify-between mt-2 text-[10px] text-zinc-600 font-mono px-1">
+              <div className="flex justify-betweupdaen mt-2 text-[10px] text-zinc-600 font-mono px-1">
                  <div className="flex gap-4">
                     <span className="flex items-center gap-1"><AlertOctagon size={10} /> ZERO ERROR PROTOCOL</span>
                  </div>
